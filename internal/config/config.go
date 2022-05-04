@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	DestinationVolume   string
 	ExcludedVolumes     []string
 	SupportedExtensions []string
 }

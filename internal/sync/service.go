@@ -1,6 +1,9 @@
 package sync
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"io"
 	"os"
 	"path/filepath"
 	"photo-sync/internal/config"
@@ -12,6 +15,8 @@ import (
 	devices "github.com/deepakjois/gousbdrivedetector"
 	"github.com/sirupsen/logrus"
 )
+
+const DateFormat = "2006-01-02"
 
 var syncServiceInstance *SyncService
 var syncServiceOnce sync.Once
@@ -68,11 +73,70 @@ func (s *SyncService) findFiles(dir string) (files []string, err error) {
 			ext := strings.ToLower(filepath.Ext(path))
 			if slices.Contains(s.cfg.SupportedExtensions, ext) {
 				files = append(files, path)
+
+				// TODO: should this go here?
+				s.ProcessFile(path)
 			}
 		}
 	}
 
 	return
+}
+
+func (s *SyncService) fileDigest(file io.Reader) string {
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		logrus.WithError(err).WithField("file", file).Error("Failed to calculate file digest")
+		return ""
+	}
+
+	return base64.RawStdEncoding.EncodeToString(hash.Sum(nil))
+}
+
+func (s *SyncService) ProcessFile(srcPath string) {
+	srcStat, err := os.Stat(srcPath)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to stat source file")
+		return
+	}
+
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to open source file")
+		return
+	}
+	defer srcFile.Close()
+
+	folderName := srcStat.ModTime().Format(DateFormat)
+	dstFolder := filepath.Join(s.cfg.DestinationVolume, folderName)
+
+	err = os.MkdirAll(dstFolder, 0755)
+	if err != nil {
+		logrus.WithError(err).WithField("destination_folder", dstFolder).Error("Failed to create destination folder")
+		return
+	}
+
+	dstPath := filepath.Join(dstFolder, filepath.Base(srcPath))
+
+	dstFile, err := os.Create(dstPath)
+	if err != nil {
+		logrus.WithError(err).WithField("destination_file", dstFile).Error("Failed to create destination file")
+		return
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		logrus.WithError(err).WithField("destination_file", dstFile).Error("Failed to copy file")
+	}
+
+	err = s.storage.Create(&File{
+		Name:   dstPath,
+		Digest: s.fileDigest(dstFile),
+	})
+	if err != nil {
+		logrus.WithError(err).Error("Failed to mark file as processed")
+	}
 }
 
 func (s *SyncService) ScanDevice(device string) {

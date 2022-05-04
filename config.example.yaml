@@ -1,3 +1,4 @@
+destinationVolume: /mnt/external-drive
 excludedVolumes:
   - /mnt/external-drive
 supportedExtensions:

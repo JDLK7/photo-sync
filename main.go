@@ -11,6 +11,7 @@ func main() {
 	cfg := config.NewConfig()
 	logrus.WithField("config", cfg).Info("Loaded config")
 
-	syncService := sync.NewSyncService(cfg, nil)
+	storage := sync.NewSQLiteStorage()
+	syncService := sync.NewSyncService(cfg, storage)
 	syncService.Listen()
 }
