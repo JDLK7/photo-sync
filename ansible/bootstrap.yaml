@@ -1,0 +1,209 @@
+---
+- name: Generate SSH key
+  hosts: 127.0.0.1
+  connection: local
+  vars_files: vars.yaml
+  tasks:
+    - name: Generate SSH key "{{ ssh_key_filename }}"
+      openssh_keypair:
+        path: "~/.ssh/{{ ssh_key_filename }}"
+        type: rsa
+        size: 4096
+
+- name: Create users
+  hosts: all
+  vars_files: vars.yaml
+  become: yes
+  become_user: root
+  tasks:
+    - name: Create user accounts and add users to groups
+      user:
+        name: "{{ item }}"
+        groups: "adm,sudo"
+      with_items: "{{ users }}"
+
+    - name: Upload SSH public key
+      vars:
+        pub_key_path: "~/.ssh/{{ ssh_key_filename }}.pub"
+      authorized_key:
+        user: "{{ item }}"
+        state: present
+        key: "{{ lookup('file', pub_key_path) }}"
+      with_items: "{{ users }}"
+
+    - name: "Allow sudo group users to sudo without a password"
+      lineinfile:
+        dest: "/etc/sudoers"
+        state: "present"
+        regexp: "^%sudo"
+        line: "%sudo	ALL=(ALL:ALL) NOPASSWD: ALL"
+
+- name: Upgrade and install packages
+  hosts: all
+  vars_files: vars.yaml
+  become: yes
+  tasks:
+    - name: Add Grafana apt key
+      apt_key:
+        url: https://packages.grafana.com/gpg.key
+        state: present
+
+    - name: Add Grafana repository
+      apt_repository:
+        repo: deb https://packages.grafana.com/oss/deb stable main
+        state: present
+
+    - name: Update all packages to their latest version
+      apt:
+        name: "*"
+        state: latest
+        update_cache: yes
+
+    - name: Upgrade the OS (apt-get dist-upgrade)
+      apt:
+        upgrade: dist
+
+    - name: Install additional packages
+      apt:
+        name: "{{ packages }}"
+
+- name: Configure shell
+  hosts: all
+  vars_files: vars.yaml
+  become: yes
+  tasks:
+    - name: Fetch oh-my-zsh
+      git:
+        repo: https://github.com/robbyrussell/oh-my-zsh
+        dest: ~/.oh-my-zsh
+
+    - name: Check if .zshrc exists
+      stat:
+        path: ~/.zshrc
+      register: zshrc_path
+
+    - name: Creating new zshrc
+      copy:
+        src: ~/.oh-my-zsh/templates/zshrc.zsh-template
+        dest: ~/.zshrc
+      when: not zshrc_path.stat.exists
+
+    - name: Set Z shell as default shell
+      become: yes
+      user:
+        name: "{{ item }}"
+        shell: /usr/bin/zsh
+      with_items: "{{ users }}"
+
+- name: Configure hostname
+  # TODO: if there are more rpis, this should be different for each one
+  hosts: all
+  vars_files: vars.yaml
+  become: yes
+  tasks:
+    - name: Check hostname
+      command: hostname
+      changed_when: false
+      register: current_hostname
+
+    - name: Set hostname
+      become: yes
+      command: hostnamectl set-hostname "{{ hostname }}"
+      when: current_hostname.stdout != hostname
+
+    - name: Set hostname in /etc/hosts
+      become: yes
+      lineinfile:
+        path: /etc/hosts
+        regexp: '127.0.1.1.*raspberrypi'
+        line: "127.0.1.1\t{{ hostname }}"
+      when: current_hostname.stdout != hostname
+
+    - name: Publish hostname
+      service:
+        name: avahi-daemon
+        enabled: yes
+        state: started
+
+- name: Install Prometheus
+  hosts: all
+  vars_files: vars.yaml
+  become: yes
+  tasks:
+    - name: Download Prometheus
+      get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus.version }}/prometheus-{{ prometheus.version }}.linux-armv7.tar.gz"
+        dest: /tmp/prometheus.tar.gz
+
+    - name: Extract Prometheus
+      unarchive:
+        remote_src: yes
+        src: /tmp/prometheus.tar.gz
+        dest: /opt/prometheus
+        extra_opts: [--strip-components=1]
+
+    - name: Create Prometheus service
+      copy:
+        src: ./templates/prometheus.service
+        dest: /etc/systemd/system/prometheus.service
+
+    - name: Create node exporter folder
+      file:
+        path: /opt/node-exporter
+        state: directory
+      
+    - name: Download node exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter.version }}/node_exporter-{{ node_exporter.version }}.linux-armv7.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+
+    - name: Extract node exporter
+      unarchive:
+        remote_src: yes
+        src: /tmp/node_exporter.tar.gz
+        dest: /opt/node-exporter
+        extra_opts: [--strip-components=1]
+
+    - name: Create node exporter service
+      copy:
+        src: ./templates/nodeexporter.service
+        dest: /etc/systemd/system/nodeexporter.service
+
+    - name: Add node exporter configuration to Prometheus
+      lineinfile:
+        dest: "/opt/prometheus/prometheus.yml"
+        state: "present"
+        line: "  - job_name: '{{ hostname }}'\n    static_configs:\n    - targets: ['127.0.0.1:9100']"
+
+    - name: Start node exporter service
+      service:
+        name: nodeexporter
+        enabled: yes
+        state: started
+
+    - name: Start Prometheus service
+      service:
+        name: prometheus
+        enabled: yes
+        state: started
+
+    - name: Start Grafana service
+      service:
+        name: grafana-server
+        enabled: yes
+        state: started
+
+- name: Expand filesystem
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check unpartitioned space
+      shell: parted /dev/mmcblk0 unit gb print free | grep 'Free Space' | tail -n1 | awk '{print $3}'
+      register: unpartitioned
+      changed_when: false
+      failed_when: unpartitioned.stderr != ""
+
+    - name: Expand root filesystem to fill disk
+      command: raspi-config --expand-rootfs
+      when: unpartitioned.stdout != "0.00GB"
+      notify: "reboot required"

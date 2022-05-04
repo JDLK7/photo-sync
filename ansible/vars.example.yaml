@@ -1,0 +1,19 @@
+ssh_key_filename: id_rsa_raspberry
+hostname: raspberrypi
+users:
+  - photosync
+prometheus:
+  version: 2.22.0
+node_exporter:
+  version: 1.0.1
+packages:
+  # Z shell
+  - git
+  - zsh
+  # utilities
+  - tree
+  - jq
+  # hostname
+  - avahi-daemon
+  # others
+  - grafana
