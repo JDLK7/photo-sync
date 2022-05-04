@@ -1,9 +1,14 @@
 package sync
 
 import (
+	"log"
+	"os"
+	"time"
+
 	"github.com/glebarez/sqlite"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Storage interface {
@@ -12,7 +17,14 @@ type Storage interface {
 }
 
 func NewSQLiteStorage() *SQLStorage {
-	db, err := gorm.Open(sqlite.Open("data.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("data.db"), &gorm.Config{
+		Logger: logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		}),
+	})
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to open SQLite connection")
 	}
