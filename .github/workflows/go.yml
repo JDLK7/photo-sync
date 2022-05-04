@@ -24,3 +24,16 @@ jobs:
     # FIXME: tests are not working right now
     # - name: Test
     #   run: go test -v ./...
+
+    - name: Build artifacts
+      if: startsWith(github.ref, 'refs/tags/')
+      run: make dist
+
+    - name: Upload artifacts
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          dist/photo-sync-linux-armv7.tar.gz
+          dist/photo-sync-linux-amd64.tar.gz
+          dist/photo-sync-darwin-amd64.tar.gz
