@@ -93,6 +93,7 @@ func (s *SyncService) fileDigest(file io.Reader) string {
 	return base64.RawStdEncoding.EncodeToString(hash.Sum(nil))
 }
 
+// FIXME: for some reason the file might be left open
 func (s *SyncService) ProcessFile(srcPath string) {
 	srcStat, err := os.Stat(srcPath)
 	if err != nil {
@@ -117,17 +118,22 @@ func (s *SyncService) ProcessFile(srcPath string) {
 	}
 
 	dstPath := filepath.Join(dstFolder, filepath.Base(srcPath))
+	file, err := s.storage.Find(dstPath)
+	if file != nil || err == nil {
+		logrus.WithField("destination_file", dstPath).Warn("File already processed; skipping")
+		return
+	}
 
 	dstFile, err := os.Create(dstPath)
 	if err != nil {
-		logrus.WithError(err).WithField("destination_file", dstFile).Error("Failed to create destination file")
+		logrus.WithError(err).WithField("destination_file", dstPath).Error("Failed to create destination file")
 		return
 	}
 	defer dstFile.Close()
 
 	_, err = io.Copy(dstFile, srcFile)
 	if err != nil {
-		logrus.WithError(err).WithField("destination_file", dstFile).Error("Failed to copy file")
+		logrus.WithError(err).WithField("destination_file", dstPath).Error("Failed to copy file")
 	}
 
 	err = s.storage.Create(&File{
