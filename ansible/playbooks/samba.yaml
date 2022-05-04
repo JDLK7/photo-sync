@@ -1,0 +1,35 @@
+---
+- name: Configure Samba
+  hosts: all
+  become: true
+  vars:
+    volume: /mnt/josehdd/media
+    user: jdomenechleal
+    password: 1234
+  tasks:
+    - name: Install packages
+      apt:
+        update_cache: yes
+        pkg:
+          - samba
+          - samba-common-bin
+    
+    - name: Samba config
+      blockinfile:
+        path: /etc/samba/smb.conf
+        block: |
+          [media]
+            path = {{ volume }}
+            valid users = {{ user }}
+            writeable = yes
+            create mask = 0777
+            directory mask = 0777
+            public = no
+    
+    - name: Create users
+      command: smbpasswd -a {{ user }} -w {{ password }}
+
+    - name: Restart samba service
+      service:
+        name: smbd
+        state: restarted
