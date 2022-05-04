@@ -1,0 +1,5 @@
+excludedVolumes:
+  - /mnt/external-drive
+supportedExtensions:
+  - .jpg
+  - .jpeg
