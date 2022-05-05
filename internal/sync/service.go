@@ -2,7 +2,7 @@ package sync
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,24 +34,15 @@ func NewSyncService(cfg *config.Config, storage Storage) *SyncService {
 	return syncServiceInstance
 }
 
+// SyncService is responsible for listening to connected devices and
+// synchronizing their new files onto another volume.
 type SyncService struct {
 	cfg            *config.Config
 	storage        Storage
 	currentDevices []string
 }
 
-func (s *SyncService) init() {
-	var err error
-	s.currentDevices, err = devices.Detect()
-	if err != nil {
-		logrus.WithError(err).Fatal("Failed to detect new devices")
-	}
-
-	logrus.WithField("devices", s.currentDevices).Info("Devices detected at start")
-
-	s.currentDevices = slices.Filter(s.cfg.ExcludedVolumes, s.currentDevices)
-}
-
+// findFiles makes a recursive search for files in the given directory.
 func (s *SyncService) findFiles(dir string) (files []string, err error) {
 	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
@@ -83,6 +74,8 @@ func (s *SyncService) findFiles(dir string) (files []string, err error) {
 	return
 }
 
+// fileDigest calculates the sha256 digest of a file. This comes in handy for
+// quickly comparing file contents.
 func (s *SyncService) fileDigest(file io.Reader) string {
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
@@ -90,10 +83,16 @@ func (s *SyncService) fileDigest(file io.Reader) string {
 		return ""
 	}
 
-	return base64.RawStdEncoding.EncodeToString(hash.Sum(nil))
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 // FIXME: for some reason the file might be left open
+// processFile performs the heavy lifting of the synchronization:
+// 1. Gets file's metadata
+// 2. Creates a destination folder with the date when the file was created
+// 3. Looks up the file to check if it was already process
+// 4. Copies the file to the destination folder
+// 5. Stores the file metadata to avoid reprocessing in the future
 func (s *SyncService) processFile(srcPath string) error {
 	srcStat, err := os.Stat(srcPath)
 	if err != nil {
@@ -134,7 +133,7 @@ func (s *SyncService) processFile(srcPath string) error {
 
 	err = s.storage.Create(&File{
 		Name:   dstPath,
-		Digest: s.fileDigest(dstFile),
+		Digest: s.fileDigest(srcFile),
 	})
 	if err != nil {
 		return errors.Wrap(err, "Failed to mark file as processed")
@@ -143,6 +142,8 @@ func (s *SyncService) processFile(srcPath string) error {
 	return nil
 }
 
+// Process file just calls the unexported method 'processFile' and logs and
+// notify any errors.
 func (s *SyncService) ProcessFile(srcPath string) {
 	err := s.processFile(srcPath)
 	if err != nil {
@@ -151,6 +152,7 @@ func (s *SyncService) ProcessFile(srcPath string) {
 	}
 }
 
+// logAndNotify logs and notifies a message related to the device.
 func (s *SyncService) logAndNotify(device, message string) {
 	logrus.WithField("device", device).Info(message)
 	notification.SendMessagef("%s %s", message, device)
@@ -169,6 +171,8 @@ func (s *SyncService) ScanDevice(device string) {
 	logrus.WithField("device", device).WithField("files", files).Debug("Files found")
 }
 
+// Listen is a blocking method that looks for new connected devices and
+// automatically starts scanning them.
 func (s *SyncService) Listen() {
 	for {
 		devices, err := devices.Detect()

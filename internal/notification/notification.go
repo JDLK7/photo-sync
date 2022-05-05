@@ -12,6 +12,8 @@ var app *pushover.Pushover
 var recipient *pushover.Recipient
 var enabled bool
 
+// init loads the configuration and configures the pushover client if
+// notifications are enabled.
 func init() {
 	cfg := config.NewConfig()
 
@@ -24,10 +26,13 @@ func init() {
 
 }
 
+// SendMessagef formats a message with the given arguments and sends a
+// notification.
 func SendMessagef(message string, args ...any) {
 	SendMessage(fmt.Sprintf(message, args...))
 }
 
+// SendMessage sends a notification with the given message.
 func SendMessage(message string) {
 	if enabled {
 		msg := pushover.NewMessageWithTitle(message, "Media Sync")
@@ -38,6 +43,7 @@ func SendMessage(message string) {
 	}
 }
 
+// SendError sends a notification formatted with the given error.
 func SendError(err error) {
 	if enabled {
 		msg := pushover.NewMessageWithTitle(err.Error(), "Media Sync")
