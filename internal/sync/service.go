@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"photo-sync/internal/config"
+	"photo-sync/internal/notification"
 	"photo-sync/pkg/utils/slices"
 	"strings"
 	"sync"
 	"time"
 
 	devices "github.com/deepakjois/gousbdrivedetector"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,8 +29,6 @@ func NewSyncService(cfg *config.Config, storage Storage) *SyncService {
 			cfg:     cfg,
 			storage: storage,
 		}
-
-		syncServiceInstance.init()
 	})
 
 	return syncServiceInstance
@@ -94,17 +94,15 @@ func (s *SyncService) fileDigest(file io.Reader) string {
 }
 
 // FIXME: for some reason the file might be left open
-func (s *SyncService) ProcessFile(srcPath string) {
+func (s *SyncService) processFile(srcPath string) error {
 	srcStat, err := os.Stat(srcPath)
 	if err != nil {
-		logrus.WithError(err).Error("Failed to stat source file")
-		return
+		return errors.Wrap(err, "Failed to stat source file")
 	}
 
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
-		logrus.WithError(err).Error("Failed to open source file")
-		return
+		return errors.Wrap(err, "Failed to open source file")
 	}
 	defer srcFile.Close()
 
@@ -113,27 +111,25 @@ func (s *SyncService) ProcessFile(srcPath string) {
 
 	err = os.MkdirAll(dstFolder, 0755)
 	if err != nil {
-		logrus.WithError(err).WithField("destination_folder", dstFolder).Error("Failed to create destination folder")
-		return
+		return errors.Wrapf(err, "Failed to create destination folder '%s'", dstFolder)
 	}
 
 	dstPath := filepath.Join(dstFolder, filepath.Base(srcPath))
 	file, err := s.storage.Find(dstPath)
 	if file != nil || err == nil {
 		logrus.WithField("destination_file", dstPath).Warn("File already processed; skipping")
-		return
+		return nil
 	}
 
 	dstFile, err := os.Create(dstPath)
 	if err != nil {
-		logrus.WithError(err).WithField("destination_file", dstPath).Error("Failed to create destination file")
-		return
+		return errors.Wrapf(err, "Failed to create destination file '%s'", dstPath)
 	}
 	defer dstFile.Close()
 
 	_, err = io.Copy(dstFile, srcFile)
 	if err != nil {
-		logrus.WithError(err).WithField("destination_file", dstPath).Error("Failed to copy file")
+		return errors.Wrapf(err, "Failed to copy file '%s'", dstPath)
 	}
 
 	err = s.storage.Create(&File{
@@ -141,13 +137,28 @@ func (s *SyncService) ProcessFile(srcPath string) {
 		Digest: s.fileDigest(dstFile),
 	})
 	if err != nil {
-		logrus.WithError(err).Error("Failed to mark file as processed")
+		return errors.Wrap(err, "Failed to mark file as processed")
+	}
+
+	return nil
+}
+
+func (s *SyncService) ProcessFile(srcPath string) {
+	err := s.processFile(srcPath)
+	if err != nil {
+		logrus.WithError(err).WithField("source_file", srcPath).Error("Failed to process file")
+		notification.SendError(err)
 	}
 }
 
+func (s *SyncService) logAndNotify(device, message string) {
+	logrus.WithField("device", device).Info(message)
+	notification.SendMessagef("%s %s", message, device)
+}
+
 func (s *SyncService) ScanDevice(device string) {
-	logrus.WithField("device", device).Info("Scanning device")
-	defer logrus.WithField("device", device).Info("Finished scanning device")
+	s.logAndNotify(device, "Scanning device")
+	defer s.logAndNotify(device, "Finished scanning device")
 
 	files, err := s.findFiles(device)
 	if err != nil {

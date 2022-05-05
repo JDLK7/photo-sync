@@ -4,3 +4,7 @@ excludedVolumes:
 supportedExtensions:
   - .jpg
   - .jpeg
+notifications:
+  enabled: true
+  userKey: example-user-key
+  apiKey: example-api-key

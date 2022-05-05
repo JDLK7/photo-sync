@@ -8,10 +8,17 @@ import (
 	"github.com/spf13/viper"
 )
 
+type NotificationsConfig struct {
+	Enabled bool
+	UserKey string
+	ApiKey  string
+}
+
 type Config struct {
 	DestinationVolume   string
 	ExcludedVolumes     []string
 	SupportedExtensions []string
+	Notifications       *NotificationsConfig
 }
 
 var config *Config

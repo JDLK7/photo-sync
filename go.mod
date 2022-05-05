@@ -5,6 +5,8 @@ go 1.18
 require (
 	github.com/deepakjois/gousbdrivedetector v0.0.0-20161027045320-4d29e4d6f1b7
 	github.com/glebarez/sqlite v1.4.3
+	github.com/gregdel/pushover v1.1.0
+	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/viper v1.11.0
 	github.com/stretchr/testify v1.7.1
