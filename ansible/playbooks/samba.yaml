@@ -2,10 +2,7 @@
 - name: Configure Samba
   hosts: all
   become: true
-  vars:
-    volume: /mnt/josehdd/media
-    user: jdomenechleal
-    password: 1234
+  vars_files: ../vars.yaml 
   tasks:
     - name: Install packages
       apt:
@@ -19,15 +16,15 @@
         path: /etc/samba/smb.conf
         block: |
           [media]
-            path = {{ volume }}
-            valid users = {{ user }}
+            path = {{ samba.volume }}
+            valid users = {{ samba.user }}
             writeable = yes
             create mask = 0777
             directory mask = 0777
             public = no
     
     - name: Create users
-      command: smbpasswd -a {{ user }} -w {{ password }}
+      command: smbpasswd -a {{ samba.user }} -w {{ samba.password }}
 
     - name: Restart samba service
       service:
