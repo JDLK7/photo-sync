@@ -1,0 +1,4 @@
+config.yaml
+data.db
+dist/
+tmp/

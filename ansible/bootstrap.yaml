@@ -19,7 +19,7 @@
     - name: Create user accounts and add users to groups
       user:
         name: "{{ item }}"
-        groups: "adm,sudo"
+        groups: "adm,sudo,users"
       with_items: "{{ users }}"
 
     - name: Upload SSH public key

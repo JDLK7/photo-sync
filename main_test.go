@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"photo-sync/internal/config"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,8 +29,11 @@ func TestFindFiles(t *testing.T) {
 		"tmp/SDCARD/DCIM/20220428_0001.jpeg",
 		"tmp/SDCARD/MEDIA/20220428_0001.mov",
 	}
+	cfg := &config.Config{
+		SupportedExtensions: []string{"txt", "jpeg", "mov"},
+	}
 
-	actualFiles, err := findFiles("tmp")
+	actualFiles, err := findFiles(cfg, "tmp")
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedFiles, actualFiles)
