@@ -6,6 +6,10 @@ prometheus:
   version: 2.22.0
 node_exporter:
   version: 1.0.1
+photo_sync:
+  version: v0.1.0
+  user_key: example-user-key
+  api_key: example-api-key
 packages:
   # Z shell
   - git
