@@ -6,8 +6,12 @@ prometheus:
   version: 2.22.0
 node_exporter:
   version: 1.0.1
+samba:
+  volume: /mnt/external-drive/media
+  user: photosync
+  password: changeme
 photo_sync:
-  version: v0.1.0
+  version: v0.2.0
   user_key: example-user-key
   api_key: example-api-key
 packages:
