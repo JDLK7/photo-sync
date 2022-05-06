@@ -132,8 +132,9 @@ func (s *SyncService) processFile(srcPath string) error {
 	}
 
 	err = s.storage.Create(&File{
-		Name:   dstPath,
-		Digest: s.fileDigest(srcFile),
+		Name: dstPath,
+		// FIXME: thos doesn't work and multiwriter kills the process with OOM
+		// Digest: s.fileDigest(srcFile),
 	})
 	if err != nil {
 		return errors.Wrap(err, "Failed to mark file as processed")
