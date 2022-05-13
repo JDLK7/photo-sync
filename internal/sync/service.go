@@ -86,7 +86,6 @@ func (s *SyncService) fileDigest(file io.Reader) string {
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
-// FIXME: for some reason the file might be left open
 // processFile performs the heavy lifting of the synchronization:
 // 1. Gets file's metadata
 // 2. Creates a destination folder with the date when the file was created
@@ -99,25 +98,26 @@ func (s *SyncService) processFile(srcPath string) error {
 		return errors.Wrap(err, "Failed to stat source file")
 	}
 
+	dstFolderName := srcStat.ModTime().Format(DateFormat)
+	dstFolder := filepath.Join(s.cfg.DestinationVolume, dstFolderName)
+
+	// Checks if the file already exists before opening/creating anything
+	dstPath := filepath.Join(dstFolder, filepath.Base(srcPath))
+	dbFile, err := s.storage.Find(dstPath)
+	if dbFile != nil || err == nil {
+		logrus.WithField("destination_file", dstPath).Warn("File already processed; skipping")
+		return nil
+	}
+
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		return errors.Wrap(err, "Failed to open source file")
 	}
 	defer srcFile.Close()
 
-	folderName := srcStat.ModTime().Format(DateFormat)
-	dstFolder := filepath.Join(s.cfg.DestinationVolume, folderName)
-
 	err = os.MkdirAll(dstFolder, 0755)
 	if err != nil {
 		return errors.Wrapf(err, "Failed to create destination folder '%s'", dstFolder)
-	}
-
-	dstPath := filepath.Join(dstFolder, filepath.Base(srcPath))
-	file, err := s.storage.Find(dstPath)
-	if file != nil || err == nil {
-		logrus.WithField("destination_file", dstPath).Warn("File already processed; skipping")
-		return nil
 	}
 
 	dstFile, err := os.Create(dstPath)
