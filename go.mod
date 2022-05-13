@@ -3,7 +3,7 @@ module photo-sync
 go 1.18
 
 require (
-	github.com/deepakjois/gousbdrivedetector v0.0.0-20161027045320-4d29e4d6f1b7
+	github.com/JDLK7/gousbdrivedetector v0.0.0-20220513105639-997c48118b58
 	github.com/glebarez/sqlite v1.4.3
 	github.com/gregdel/pushover v1.1.0
 	github.com/pkg/errors v0.9.1
