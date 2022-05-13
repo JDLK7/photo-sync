@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	devices "github.com/deepakjois/gousbdrivedetector"
+	devices "github.com/JDLK7/gousbdrivedetector"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
